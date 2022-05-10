@@ -2,6 +2,8 @@
 
 Customized Go-Ethereum client supporting Peri and latency measurement on Ethereum mainnet and testnets.
 
+This is customized based on [the last commit on Jan 7, 2022 of go-ethereum](https://github.com/ethereum/go-ethereum/tree/1884f37f2c772d6f1d567432e76cbd7b90d442a9). 
+
 See the [original README documentation](README_OF_ORIGINAL_GETH.md) for other details. 
 
 
