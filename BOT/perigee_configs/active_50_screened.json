@@ -1,0 +1,25 @@
+{
+    "Active": true,
+    "Targeted": true,
+    "ShowTxDelivery": false,
+    "Period": 1800,
+    "ReplaceRatio": 0.5,
+    "DialRatio": 1,
+    "MinInbound": 10,
+    "MaxDelayPenalty": 30000,
+    "ObservedTxRatio": 1,
+    "TargetAccountList": [
+        "0x0123456789abcde0123456789abcde0123456789",
+        "0x123456789abcde0123456789abcde0123456789a"
+    ],
+    "NoPeerIPList": [
+        "13.250.2.233",
+        "18.139.84.8",
+        "18.141.177.5",
+        "18.141.209.22"
+    ],
+    "NoDropList": [
+        "13.229.105.236",
+        "18.141.140.250"
+    ]
+}

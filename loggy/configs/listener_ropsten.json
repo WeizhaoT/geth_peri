@@ -1,0 +1,12 @@
+{
+    "FlagLoggy": false,
+    "FlagConn": true,
+    "FlagConnWarn": false,
+    "FlagPerigee": true,
+    "FlagAllTx": false,
+    "FlagForward": true,
+    "FlagObserve": true,
+    "FlagBroadcast": false,
+    "EPOCH_DURATION": 3600,
+    "LOGS_BASEPATH": "/data/logs/ropsten"
+}
