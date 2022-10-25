@@ -1,0 +1,12 @@
+{
+    "FlagLoggy": false,
+    "FlagConn": true,
+    "FlagConnWarn": false,
+    "FlagPerigee": true,
+    "FlagForward": true,
+    "FlagAllTx": false,
+    "FlagObserve": true,
+    "FlagBroadcast": false,
+    "EPOCH_DURATION": 43200,
+    "LOGS_BASEPATH": "/data/logs/mainnet"
+}

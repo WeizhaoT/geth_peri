@@ -214,6 +214,9 @@ type Config struct {
 
 	// OverrideTerminalTotalDifficultyPassed (TODO: remove after the fork)
 	OverrideTerminalTotalDifficultyPassed *bool `toml:",omitempty"`
+
+	// BOT INSERTION
+	PerigeeConfig *PerigeeConfig
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.

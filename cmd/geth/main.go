@@ -155,6 +155,10 @@ var (
 		utils.MinerNotifyFullFlag,
 		utils.IgnoreLegacyReceiptsFlag,
 		configFileFlag,
+
+		// BOT INSERTION
+		utils.PeerSelConfigFlag,
+		utils.LoggyDirFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
 
 	rpcFlags = []cli.Flag{
@@ -349,6 +353,9 @@ func geth(ctx *cli.Context) error {
 	prepare(ctx)
 	stack, backend := makeFullNode(ctx)
 	defer stack.Close()
+
+	// BOT INSERTION
+	log.Warn(fmt.Sprintf("Starting full node with DialRatio = %d", stack.Server().DialRatio))
 
 	startNode(ctx, stack, backend, false)
 	stack.Wait()

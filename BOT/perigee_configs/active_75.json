@@ -1,0 +1,21 @@
+{
+    "Active": true,
+    "ScreenOnly": false,
+    "ShowTxDelivery": false,
+    "Period": 1200,
+    "ReplaceRatio": 0.75,
+    "DialRatio": 1,
+    "MaxDelayPenalty": 30000,
+    "ObservedTxRatio": 4,
+    "ScreenList": [
+        "0x033D5Cd2b6cE13254d26282497eF447D8AD03705",
+        "0x6d6F9F8D2e54634212AC652744fec550E83aA069",
+        "0x10956A68Bc4C7387Ffdf4d6d4833Fdf00e71C217",
+        "0x0E6bF6417aD6BA652990a29f14271b232492CCd2",
+        "0x5eD9b924a5B7d2C3D53d95fE5D4b2A9cEcE81531"
+    ],
+    "NoPeerlist": [
+        "enode://bd9bc78c5d213f837665572fcb5d0f8ac57b246ad47933e906923ce119a4d8e71743c09860805820c9a86d02a02e99fd6aae0f7b3be179f915bd6599cc53b3e2@3.21.28.136:30303",
+        "enode://3f9fdac4b1963c863c2b1d337db43c1aa3cfd6b5ec5777f3d8f2835bef0a649d8231e488646ce15625dff422b40f6ea859c4d17293ae04c2df12b576f119e639@13.59.178.157:30303"
+    ]
+}

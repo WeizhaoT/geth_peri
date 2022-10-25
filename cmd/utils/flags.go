@@ -55,6 +55,7 @@ import (
 	"github.com/ethereum/go-ethereum/les"
 	lescatalyst "github.com/ethereum/go-ethereum/les/catalyst"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/loggy"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
 	"github.com/ethereum/go-ethereum/metrics/influxdb"
@@ -79,6 +80,20 @@ import (
 // are the same for all commands.
 
 var (
+	// BOT INSERTION
+	PeerSelConfigFlag = &flags.DirectoryFlag{
+		Name:     "peersel",
+		Usage:    "path to config file of peer selection policy",
+		Value:    flags.DirectoryString(""),
+		Category: flags.EthCategory,
+	}
+	LoggyDirFlag = &flags.DirectoryFlag{
+		Name:     "loggydir",
+		Usage:    "path to loggy config file",
+		Value:    flags.DirectoryString(""),
+		Category: flags.LoggingCategory,
+	}
+
 	// General settings
 	DataDirFlag = &flags.DirectoryFlag{
 		Name:     "datadir",
@@ -1748,6 +1763,19 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	setMiner(ctx, &cfg.Miner)
 	setRequiredBlocks(ctx, cfg)
 	setLes(ctx, cfg)
+
+	// BOT INSERTION
+	lcfg, err := loggy.NewLoggyConfig(ctx.String(LoggyDirFlag.Name))
+	if err != nil {
+		panic(err)
+	}
+	loggy.Config = lcfg
+
+	pcfg, err := ethconfig.NewPerigeeConfig(ctx.String(PeerSelConfigFlag.Name))
+	if err != nil {
+		panic(err)
+	}
+	cfg.PerigeeConfig = pcfg
 
 	// Cap the cache allowance and tune the garbage collector
 	mem, err := gopsutil.VirtualMemory()

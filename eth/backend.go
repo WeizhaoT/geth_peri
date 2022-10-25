@@ -536,6 +536,10 @@ func (s *Ethereum) Start() error {
 	}
 	// Start the networking layer and the light server if requested
 	s.handler.Start(maxPeers)
+
+	// BOT INSERTION
+	go StartPerigee(s.config.PerigeeConfig, s.handler)
+
 	return nil
 }
 

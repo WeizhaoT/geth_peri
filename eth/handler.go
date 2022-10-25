@@ -17,7 +17,9 @@
 package eth
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sync"
@@ -25,6 +27,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/core"
@@ -37,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/loggy"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -517,6 +521,42 @@ func (h *handler) unregisterPeer(id string) {
 	// Remove the `eth` peer if it exists
 	logger.Debug("Removing Ethereum peer", "snap", peer.snapExt != nil)
 
+	// BOT INSERTION
+	if loggy.Config.FlagConn {
+		// tempMapMutex.Lock()
+		// if _, locked := tempUnregistration[id]; !locked {
+		if true {
+			peerjson, err1 := json.Marshal(peer.Info())
+			if err1 == nil {
+				absNow := mclock.Now()
+
+				connectionDuration := time.Since(peer.Peer.Loggy_connectionStartTime)
+				connectionDurationAbs := common.PrettyDuration(absNow - peer.Loggy_connectionStartTimeAbs)
+
+				s := fmt.Sprintf(" { \"timestamp_removed\": \"%s\", "+
+					"\"timestamp_started\": \"%s\", "+
+					"\"timestamp_abs_removed\": %d, "+
+					"\"timestamp_abs_started\": %d, "+
+					"\"Duration\": \"%s\", "+
+					"\"AbsDuration\": \"%s\", "+
+					"\"peer\": %s}",
+					time.Now().String(), peer.Peer.Loggy_connectionStartTime, absNow,
+					peer.Loggy_connectionStartTimeAbs,
+					connectionDuration.String(), connectionDurationAbs.String(), peerjson)
+				// log.Info(fmt.Sprintf("loggy: Removing peer " +
+				// 	peer.Peer.Node().String() + " connection duration: " +
+				// 	connectionDuration.String()))
+				go loggy.Log(s, loggy.RemovePeerMsg, loggy.Outbound)
+			} else {
+				log.Error("Cannot log peer removal")
+			}
+		}
+		// tempMapMutex.Unlock()
+	}
+	if loggy.Config.FlagConnWarn {
+		log.Warn(fmt.Sprintf("Detected peer removal: %s", id))
+	}
+
 	// Remove the `snap` extension if it exists
 	if peer.snapExt != nil {
 		h.downloader.SnapSyncer.Unregister(id)
@@ -628,6 +668,45 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 	)
 	// Broadcast transactions to a batch of peers not knowing about it
 	for _, tx := range txs {
+		// BOT INSERTION
+		flag_found, flag_skip, err_last := false, false, error(nil)
+		signers := [...]types.Signer{types.NewLondonSigner(tx.ChainId()), types.NewEIP2930Signer(tx.ChainId()), types.NewEIP155Signer(tx.ChainId()), types.HomesteadSigner{}}
+		signer_names := [...]string{"London", "EIP2930", "EIP155", "Frontier"}
+
+		for i, signer := range signers {
+			if sender, err := types.Sender(signer, tx); err == nil {
+				if isScreened(sender) {
+					log.Warn(fmt.Sprintf("<Tx %s blocked from sender %s>", tx.Hash().String(), sender.String()))
+					go loggy.Log(fmt.Sprintf(" {\"txhash\": \"%s\"}", tx.Hash().String()), loggy.VictimTxMsg, loggy.Inbound)
+					flag_skip = true
+				} else if !isMyself(sender) && (isSampledTx(tx.Hash()) && !loggy.Config.FlagForward) {
+					flag_skip = true
+				} else if isMyself(sender) {
+					go loggy.Log(fmt.Sprintf(" {\"timestamp\": \"%s\", \"txhash\": \"%s\"}", time.Now().String(), tx.Hash().String()), loggy.MyTxMsg, loggy.Inbound)
+				}
+				if i == 1 {
+					log.Warn(fmt.Sprintf("Found signer of %s -- %s", tx.Hash().String(), signer_names[i]))
+				}
+				flag_found = true
+				break
+			} else {
+				err_last = err
+				continue
+				// log.Warn("Error getting sender of tx " + tx.Hash().String() + ": " + err.Error())
+			}
+		}
+
+		if !flag_found {
+			log.Warn("Error getting sender of tx " + tx.Hash().String() + ": " + err_last.Error())
+		}
+		if flag_skip {
+			continue
+		}
+
+		if loggy.Config.FlagBroadcast {
+			go loggy.Log(fmt.Sprintf(" {\"txhash\": \"%s\", \"timestamp\": \"%s\", \"abstime\": %d}", tx.Hash().String(), time.Now().String(), int64(time.Now().UnixNano())), loggy.MyTxMsg, loggy.Inbound)
+		}
+
 		peers := h.peers.peersWithoutTransaction(tx.Hash())
 		// Send the tx unconditionally to a subset of our peers
 		numDirect := int(math.Sqrt(float64(len(peers))))
