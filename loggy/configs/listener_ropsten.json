@@ -2,7 +2,7 @@
     "FlagLoggy": false,
     "FlagConn": true,
     "FlagConnWarn": false,
-    "FlagPerigee": true,
+    "FlagPeri": true,
     "FlagAllTx": false,
     "FlagForward": true,
     "FlagObserve": true,

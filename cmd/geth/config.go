@@ -147,7 +147,7 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	utils.SetEthConfig(ctx, stack, &cfg.Eth)
 
 	// BOT INSERTION
-	cfg.Node.P2P.DialRatio = cfg.Eth.PerigeeConfig.DialRatio
+	cfg.Node.P2P.DialRatio = cfg.Eth.PeriConfig.DialRatio
 	log.Warn(fmt.Sprintf("reading config with DialRatio = %d", cfg.Node.P2P.DialRatio))
 
 	if ctx.IsSet(utils.EthStatsURLFlag.Name) {
@@ -156,8 +156,8 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	applyMetricConfig(ctx, &cfg)
 
 	// BOT INSERTION
-	stack.Config().P2P.DialRatio = cfg.Eth.PerigeeConfig.DialRatio
-	stack.Server().DialRatio = cfg.Eth.PerigeeConfig.DialRatio
+	stack.Config().P2P.DialRatio = cfg.Eth.PeriConfig.DialRatio
+	stack.Server().DialRatio = cfg.Eth.PeriConfig.DialRatio
 	log.Warn(fmt.Sprintf("applying config with DialRatio = %d", stack.Server().DialRatio))
 
 	return stack, cfg

@@ -54,7 +54,7 @@ const (
 	PeerMsg       MessageType = 0xfa
 	ObserveTxMsg  MessageType = 0xfb
 	VictimTxMsg   MessageType = 0xfc
-	PerigeeMsg    MessageType = 0xfd
+	PeriMsg       MessageType = 0xfd
 	RemovePeerMsg MessageType = 0xfe
 	Other         MessageType = 0xff
 )
@@ -64,7 +64,7 @@ const (
 	Outbound MessageDirection = 1
 )
 
-const targetListDir = "geth_ag/loggy/listened_target.json"
+const targetListDir = "geth_menata/loggy/listened_target.json"
 const MAXMEM = 2000
 
 var targets []contractMeta
@@ -263,8 +263,8 @@ func GET_LOG_FILE(msgtype MessageType, msgdir MessageDirection) string {
 		return fname
 	}
 
-	if msgtype == PerigeeMsg {
-		fname := path.Join(Config.LOGS_BASEPATH, fmt.Sprintf("Perigee_%s.jsonl", epoch))
+	if msgtype == PeriMsg {
+		fname := path.Join(Config.LOGS_BASEPATH, fmt.Sprintf("Peri_%s.jsonl", epoch))
 		return fname
 	}
 

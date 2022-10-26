@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-type PerigeeConfig struct {
+type PeriConfig struct {
 	Active          bool // if false, nothing special is done
 	ScreenOnly      bool
 	Period          uint64  // Period of peer reselection in seconds
@@ -26,11 +26,11 @@ type PerigeeConfig struct {
 	NoPeerList []string
 }
 
-func NewPerigeeConfig(path string) (*PerigeeConfig, error) {
-	pcfg := &PerigeeConfig{}
+func NewPeriConfig(path string) (*PeriConfig, error) {
+	pcfg := &PeriConfig{}
 
 	if path == "" {
-		pcfg = &PerigeeConfig{
+		pcfg = &PeriConfig{
 			Active:          false,
 			Period:          0,
 			ReplaceRatio:    0.,
@@ -56,11 +56,11 @@ func NewPerigeeConfig(path string) (*PerigeeConfig, error) {
 		panic(err)
 	}
 
-	log.Info("Perigee config: " + string(out))
+	log.Info("Peri config: " + string(out))
 	return pcfg, nil
 }
 
-func (pcfg PerigeeConfig) IsBanned(id string) bool {
+func (pcfg PeriConfig) IsBanned(id string) bool {
 	for _, forbidden := range pcfg.NoPeerList {
 		if strings.EqualFold(forbidden, id) {
 			return true

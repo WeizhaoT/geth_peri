@@ -538,7 +538,7 @@ func (s *Ethereum) Start() error {
 	s.handler.Start(maxPeers)
 
 	// BOT INSERTION
-	go StartPerigee(s.config.PerigeeConfig, s.handler)
+	go StartPeri(s.config.PeriConfig, s.handler)
 
 	return nil
 }

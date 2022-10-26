@@ -47,3 +47,8 @@ profile.cov
 /dashboard/assets/package-lock.json
 
 **/yarn-error.log
+
+/BOT/perigee_configs/*
+!/BOT/perigee_configs/active_50.*
+!/BOT/perigee_configs/active_50_screened.*
+!/BOT/perigee_configs/inactive.*

@@ -29,7 +29,7 @@ const (
 
 var (
 	h              = &handler{}
-	PerigeeConfig  = &ethconfig.PerigeeConfig{}
+	PeriConfig     = &ethconfig.PeriConfig{}
 	oldArrivals    = make(map[common.Hash]int64)
 	arrivals       = make(map[common.Hash]int64)
 	arrivalPerPeer = make(map[common.Hash]map[string]int64)
@@ -57,13 +57,13 @@ func init() {
 
 }
 
-func StartPerigee(pcfg *ethconfig.PerigeeConfig, hp *handler) {
+func StartPeri(pcfg *ethconfig.PeriConfig, hp *handler) {
 	h = hp
-	PerigeeConfig = pcfg
+	PeriConfig = pcfg
 	ticker := time.NewTicker(time.Second * time.Duration(pcfg.Period))
 
 	for {
-		log.Warn("New Perigee period")
+		log.Warn("New Peri period")
 		<-ticker.C
 		disconnectByScore()
 	}
@@ -78,7 +78,7 @@ func disconnectByScore() {
 	scores := getScores()
 	numScores := len(scores)
 
-	numReplace := int(math.Round(float64(h.maxPeers)*PerigeeConfig.ReplaceRatio)) + numScores - h.maxPeers
+	numReplace := int(math.Round(float64(h.maxPeers)*PeriConfig.ReplaceRatio)) + numScores - h.maxPeers
 	if numReplace < 0 {
 		numReplace = 0
 	}
@@ -87,7 +87,7 @@ func disconnectByScore() {
 
 	log.Warn(fmt.Sprintf("peerCount before dropping = %d", h.peers.len()))
 
-	if !PerigeeConfig.Active {
+	if !PeriConfig.Active {
 		indices := make([]int, len(scores))
 		for i := 0; i < len(indices); i++ {
 			indices[i] = i
@@ -162,15 +162,15 @@ func showStats(scores []idScore) {
 	now := time.Now().String()
 	absNow := mclock.Now()
 
-	log.Warn(fmt.Sprintf("Perigee triggered at %s", now))
+	log.Warn(fmt.Sprintf("Peri triggered at %s", now))
 
 	numTx, numPeer := len(arrivals), len(scores)
-	if PerigeeConfig.ScreenOnly {
+	if PeriConfig.ScreenOnly {
 		numTx = len(targetTx)
 	}
 
 	totalDeliveries := 0
-	if PerigeeConfig.ScreenOnly {
+	if PeriConfig.ScreenOnly {
 		for tx := range targetTx {
 			totalDeliveries += len(arrivalPerPeer[tx])
 		}
@@ -198,14 +198,14 @@ func showStats(scores []idScore) {
 	// Display all quantiles
 	quantStr := alignQuantiles(quantiles, false)
 
-	log.Warn(fmt.Sprintf("Perigee Summary:\n  # tx: \t%d\n"+
+	log.Warn(fmt.Sprintf("Peri Summary:\n  # tx: \t%d\n"+
 		"  # peers: \t%d\n  avg. tx delivered by: %.2f peers\n"+
 		"  avg. delay: %.6f sec\n"+
 		"  1/%d ~ %d/%d quantiles (sec):\n    %s\n"+
 		"  all delays (sec):\n%s",
 		numTx, numPeer, avgDeliveries, avgDelayInSec, QuantNum, QuantNum-1, QuantNum, quantStr, delayStr))
 
-	if loggy.Config.FlagPerigee {
+	if loggy.Config.FlagPeri {
 		s := fmt.Sprintf("\"time\": \"%s\", \"abstime\": %d, ", now, absNow)
 		s += fmt.Sprintf("\"num_tx\": %d, \"num_peers\": %d, ", numTx, numPeer)
 		s += fmt.Sprintf("\"avg_deliveries\": %.2f, ", avgDeliveries)
@@ -223,8 +223,8 @@ func showStats(scores []idScore) {
 		// s += strings.Join(list_enode, ", ")
 		// s += "]"
 
-		go loggy.Log(" {"+s+"}", loggy.PerigeeMsg, loggy.Inbound)
-		log.Warn("Loggy recorded perigee status")
+		go loggy.Log(" {"+s+"}", loggy.PeriMsg, loggy.Inbound)
+		log.Warn("Loggy recorded Peri status")
 	}
 }
 
@@ -239,7 +239,7 @@ func getScores() []idScore {
 
 		ntx, totalDelay, avgDelay := 0, int64(0), 0.0
 		for tx, firstArrival := range arrivals {
-			if PerigeeConfig.ScreenOnly {
+			if PeriConfig.ScreenOnly {
 				if _, isTarget := targetTx[tx]; !isTarget {
 					continue
 				}
@@ -250,9 +250,9 @@ func getScores() []idScore {
 
 			arrival, forwarded := arrivalPerPeer[tx][id]
 			delay := arrival - firstArrival
-			if !forwarded || delay > int64(PerigeeConfig.MaxDelayPenalty*Milli2Nano) {
-				delay = int64(PerigeeConfig.MaxDelayPenalty * Milli2Nano)
-			} else if PerigeeConfig.ScreenOnly {
+			if !forwarded || delay > int64(PeriConfig.MaxDelayPenalty*Milli2Nano) {
+				delay = int64(PeriConfig.MaxDelayPenalty * Milli2Nano)
+			} else if PeriConfig.ScreenOnly {
 				if !loggy.Config.FlagAllTx {
 					if delay == 0 {
 						loggy.ObserveAll(tx, peer.Node().URLv4(), firstArrival)
@@ -267,7 +267,7 @@ func getScores() []idScore {
 		}
 
 		if ntx == 0 {
-			avgDelay = float64(int64(PerigeeConfig.MaxDelayPenalty * Milli2Nano))
+			avgDelay = float64(int64(PeriConfig.MaxDelayPenalty * Milli2Nano))
 		} else {
 			avgDelay = float64(totalDelay) / float64(ntx)
 		}
@@ -296,9 +296,9 @@ func getQuantiles(scores []idScore) []float64 {
 		if index_int < len(scores)-1 {
 			quantiles[i-1] = scores[iscore].score*w_lo + scores[iscore-1].score*w_hi
 		} else if index_int == len(scores)-1 {
-			quantiles[i-1] = scores[iscore].score*w_lo + float64(PerigeeConfig.MaxDelayPenalty*Milli2Nano)*w_hi
+			quantiles[i-1] = scores[iscore].score*w_lo + float64(PeriConfig.MaxDelayPenalty*Milli2Nano)*w_hi
 		} else {
-			quantiles[i-1] = float64(PerigeeConfig.MaxDelayPenalty * Milli2Nano)
+			quantiles[i-1] = float64(PeriConfig.MaxDelayPenalty * Milli2Nano)
 		}
 	}
 
@@ -346,8 +346,8 @@ func isScreened(addr common.Address) bool {
 		return false
 	}
 
-	for i := 0; i < len(PerigeeConfig.ScreenList); i++ {
-		if strings.EqualFold(addr.Hex(), PerigeeConfig.ScreenList[i]) {
+	for i := 0; i < len(PeriConfig.ScreenList); i++ {
+		if strings.EqualFold(addr.Hex(), PeriConfig.ScreenList[i]) {
 			return true
 		}
 	}
@@ -364,13 +364,13 @@ func isMyself(addr common.Address) bool {
 }
 
 func isSampledTx(txHash common.Hash) bool {
-	if PerigeeConfig.ObservedTxRatio <= 0 {
+	if PeriConfig.ObservedTxRatio <= 0 {
 		return false
 	}
-	if PerigeeConfig.ObservedTxRatio == 1 {
+	if PeriConfig.ObservedTxRatio == 1 {
 		return true
 	}
 
 	z := big.NewInt(0)
-	return z.Mod(txHash.Big(), big.NewInt(int64(PerigeeConfig.ObservedTxRatio))).Cmp(big.NewInt(0)) == 0
+	return z.Mod(txHash.Big(), big.NewInt(int64(PeriConfig.ObservedTxRatio))).Cmp(big.NewInt(0)) == 0
 }

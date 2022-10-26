@@ -1771,11 +1771,11 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	}
 	loggy.Config = lcfg
 
-	pcfg, err := ethconfig.NewPerigeeConfig(ctx.String(PeerSelConfigFlag.Name))
+	pcfg, err := ethconfig.NewPeriConfig(ctx.String(PeerSelConfigFlag.Name))
 	if err != nil {
 		panic(err)
 	}
-	cfg.PerigeeConfig = pcfg
+	cfg.PeriConfig = pcfg
 
 	// Cap the cache allowance and tune the garbage collector
 	mem, err := gopsutil.VirtualMemory()

@@ -13,7 +13,7 @@ type LoggyConfig struct {
 	FlagLoggy      bool
 	FlagConn       bool
 	FlagConnWarn   bool
-	FlagPerigee    bool
+	FlagPeri       bool
 	FlagForward    bool
 	FlagBroadcast  bool
 	FlagObserve    bool
@@ -30,7 +30,7 @@ func NewLoggyConfig(path string) (*LoggyConfig, error) {
 			FlagLoggy:      false,
 			FlagConn:       false,
 			FlagConnWarn:   false,
-			FlagPerigee:    true,
+			FlagPeri:       true,
 			FlagForward:    true,
 			FlagBroadcast:  false,
 			FlagObserve:    false,
