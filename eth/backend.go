@@ -537,7 +537,7 @@ func (s *Ethereum) Start() error {
 	// Start the networking layer and the light server if requested
 	s.handler.Start(maxPeers)
 
-	// BOT INSERTION
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 	go StartPeri(s.config.PeriConfig, s.handler)
 
 	return nil

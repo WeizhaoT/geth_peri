@@ -1,37 +1,19 @@
-// BOT Insertion
-
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 package loggy
 
 import (
-	"bytes"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
 )
 
 type MessageType int
 type MessageDirection int
-
-type contractMeta struct {
-	Hash string
-	Data []byte
-}
-
-type contractMetaRaw struct {
-	Hash string
-	Data string
-}
 
 const (
 	// Protocol messages belonging to eth/62
@@ -50,11 +32,12 @@ const (
 	ReqReceiptsMsg MessageType = 0x0f
 	GetReceiptsMsg MessageType = 0x10
 
+	BannedPeerMsg MessageType = 0xf8
 	MyTxMsg       MessageType = 0xf9
 	PeerMsg       MessageType = 0xfa
 	ObserveTxMsg  MessageType = 0xfb
 	VictimTxMsg   MessageType = 0xfc
-	PeriMsg       MessageType = 0xfd
+	PerigeeMsg    MessageType = 0xfd
 	RemovePeerMsg MessageType = 0xfe
 	Other         MessageType = 0xff
 )
@@ -64,66 +47,22 @@ const (
 	Outbound MessageDirection = 1
 )
 
-const targetListDir = "geth_menata/loggy/listened_target.json"
 const MAXMEM = 2000
-
-var targets []contractMeta
 
 var txmap map[common.Hash]int64
 var oldTxmap map[common.Hash]int64
 
 var lastEpochStart int64
 var Loggymutex sync.Mutex
+var PeerBanMutex sync.Mutex
 var Config *LoggyConfig
 
 func init() {
-	targets = make([]contractMeta, 0)
 	txmap = make(map[common.Hash]int64)
 	oldTxmap = make(map[common.Hash]int64)
-
-	var targetsRaw []contractMetaRaw
-
-	// Read target contract data from JSON file
-	home, err := os.UserHomeDir()
-	if err != nil {
-		log.Error("Can't resolve home dir")
-		return
-	}
-	filePath := path.Join(home, targetListDir)
-	jsonFile, err := os.Open(filePath)
-	if err != nil {
-		log.Error("Can't open " + filePath + ", error: " + err.Error())
-		return
-	}
-	defer jsonFile.Close()
-	byteValue, err := ioutil.ReadAll(jsonFile)
-	if err != nil {
-		log.Error("Can't read data from " + filePath + ", error: " + err.Error())
-		return
-	}
-	json.Unmarshal(byteValue, &targetsRaw)
-
-	// Parse contract data
-	for i, tRaw := range targetsRaw {
-		dataStr := tRaw.Data
-		if dataStr[:2] == `0x` {
-			dataStr = dataStr[2:]
-		}
-		data, err := hex.DecodeString(dataStr)
-		if err != nil {
-			log.Warn("Entry %d has bad hex data", i)
-		} else {
-			targets = append(targets, contractMeta{
-				Hash: tRaw.Hash,
-				Data: data,
-			})
-		}
-	}
-
-	fmt.Printf("Loggy -- Successfully read contract entries from %s:\n%+v\n", filePath, targets)
 }
 
-//updates epoch if needed and returns true if updated
+// updates epoch if needed and returns true if updated
 func changeEpochIfNeeded() bool {
 	//new epoch every EPOCH_DURATION
 	if time.Now().Unix() >= (lastEpochStart + Config.EPOCH_DURATION) {
@@ -133,7 +72,7 @@ func changeEpochIfNeeded() bool {
 	return false
 }
 
-//returns the path of file to log to and if the epoch just changed
+// returns the path of file to log to and if the epoch just changed
 func GET_LOG_FILE(msgtype MessageType, msgdir MessageDirection) string {
 	changeEpochIfNeeded()
 	epoch := strconv.FormatInt(lastEpochStart, 10)
@@ -263,8 +202,8 @@ func GET_LOG_FILE(msgtype MessageType, msgdir MessageDirection) string {
 		return fname
 	}
 
-	if msgtype == PeriMsg {
-		fname := path.Join(Config.LOGS_BASEPATH, fmt.Sprintf("Peri_%s.jsonl", epoch))
+	if msgtype == PerigeeMsg {
+		fname := path.Join(Config.LOGS_BASEPATH, fmt.Sprintf("Perigee_%s.jsonl", epoch))
 		return fname
 	}
 
@@ -288,10 +227,15 @@ func GET_LOG_FILE(msgtype MessageType, msgdir MessageDirection) string {
 		return fname
 	}
 
+	if msgtype == BannedPeerMsg {
+		fname := path.Join(Config.LOGS_BASEPATH, fmt.Sprintf("BannedNodes_%s.jsonl", epoch))
+		return fname
+	}
+
 	return (path.Join(Config.LOGS_BASEPATH, fmt.Sprintf("other_%s.txt", epoch)))
 }
 
-//assumes valid json is being passed to function as string
+// assumes valid json is being passed to function as string
 func Log(jsonstr string, msgtype MessageType, msgdir MessageDirection) {
 	Loggymutex.Lock()
 	defer Loggymutex.Unlock()
@@ -308,26 +252,24 @@ func Log(jsonstr string, msgtype MessageType, msgdir MessageDirection) {
 	f.WriteString("\n")
 }
 
-func IsTarget(tx *types.Transaction) bool {
-	if tx.To() == nil {
-		return false
+func LogBan(peerID string, reason string) {
+	timestamp := time.Now().String()
+
+	PeerBanMutex.Lock()
+	defer PeerBanMutex.Unlock()
+
+	fname := GET_LOG_FILE(BannedPeerMsg, Inbound)
+	f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic("Cannot create file " + err.Error())
 	}
 
-	for _, target := range targets {
-		if strings.EqualFold(tx.To().Hex(), target.Hash) {
-			if bytes.Equal(tx.Data(), target.Data) {
-				return true
-			} else {
-				log.Warn(fmt.Sprintf(`Data not match. tx: %s, dict: %s`,
-					hex.EncodeToString(tx.Data()), hex.EncodeToString(target.Data)))
-				return false
-			}
-		}
-	}
-	return false
+	defer f.Close()
+	f.WriteString(fmt.Sprintf("{\"enode\": \"%s\", \"timestamp\": \"%s\", \"reason\": \"%s\"}", peerID, timestamp, reason))
+	f.WriteString("\n")
 }
 
-func ObserveGeneral(txHash common.Hash, enode string, timestamp int64, filename string) {
+func ObserveGeneral(txHash common.Hash, enode string, timestamp int64) {
 	if !Config.FlagObserve {
 		return
 	}
@@ -351,24 +293,12 @@ func ObserveGeneral(txHash common.Hash, enode string, timestamp int64, filename 
 	}
 
 	go Log(fmt.Sprintf(`{"hash":"%s","enode":"%s","time":%d,"isotime":"%s"}`, txHash.Hex(), enode, int64(timestamp), time.Unix(0, timestamp).String()), ObserveTxMsg, Inbound)
-
-	// fname := path.Join(Config.LOGS_BASEPATH, filename)
-	// f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-
-	// if err != nil {
-	// 	panic("Cannot create file " + err.Error())
-	// }
-
-	// defer f.Close()
-
-	// f.WriteString()
-	// f.WriteString("\n")
 }
 
 func Observe(txHash common.Hash, timestamp int64) {
-	ObserveGeneral(txHash, "", timestamp, "observe_logs_geth.jsonl")
+	ObserveGeneral(txHash, "", timestamp)
 }
 
 func ObserveAll(txHash common.Hash, enode string, timestamp int64) {
-	ObserveGeneral(txHash, enode, timestamp, "alltx_logs_geth.jsonl")
+	ObserveGeneral(txHash, enode, timestamp)
 }

@@ -80,14 +80,14 @@ import (
 // are the same for all commands.
 
 var (
-	// BOT INSERTION
-	PeerSelConfigFlag = &flags.DirectoryFlag{
-		Name:     "peersel",
-		Usage:    "path to config file of peer selection policy",
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+	PeriConfigFlag = &flags.DirectoryFlag{
+		Name:     "peri",
+		Usage:    "path to config file of peri policy",
 		Value:    flags.DirectoryString(""),
 		Category: flags.EthCategory,
 	}
-	LoggyDirFlag = &flags.DirectoryFlag{
+	LoggyPathFlag = &flags.DirectoryFlag{
 		Name:     "loggydir",
 		Usage:    "path to loggy config file",
 		Value:    flags.DirectoryString(""),
@@ -1764,14 +1764,14 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	setRequiredBlocks(ctx, cfg)
 	setLes(ctx, cfg)
 
-	// BOT INSERTION
-	lcfg, err := loggy.NewLoggyConfig(ctx.String(LoggyDirFlag.Name))
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+	lcfg, err := loggy.NewLoggyConfig(ctx.String(LoggyPathFlag.Name))
 	if err != nil {
 		panic(err)
 	}
 	loggy.Config = lcfg
 
-	pcfg, err := ethconfig.NewPeriConfig(ctx.String(PeerSelConfigFlag.Name))
+	pcfg, err := ethconfig.NewPeriConfig(ctx.String(PeriConfigFlag.Name))
 	if err != nil {
 		panic(err)
 	}

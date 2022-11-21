@@ -93,7 +93,7 @@ type Peer struct {
 	term chan struct{} // Termination channel to stop the broadcasters
 	lock sync.RWMutex  // Mutex protecting the internal fields
 
-	// BOT INSERTION
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 	Loggy_connectionStartTime    time.Time
 	Loggy_connectionStartTimeAbs mclock.AbsTime
 }
@@ -118,7 +118,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		txpool:          txpool,
 		term:            make(chan struct{}),
 
-		// BOT INSERTION
+		// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 		Loggy_connectionStartTime:    time.Now(),
 		Loggy_connectionStartTimeAbs: mclock.Now(),
 	}

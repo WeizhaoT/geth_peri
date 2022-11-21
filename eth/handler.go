@@ -340,6 +340,20 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		peer.Log().Debug("Ethereum handshake failed", "err", err)
 		return err
 	}
+
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+	peerEnode := peer.Node().URLv4()
+	if PeriConfig.IsBanned(peerEnode) {
+		log.Error("Rejected experimental node " + peerEnode)
+		loggy.LogBan(peerEnode, "Another_Listener_Node")
+		return p2p.DiscSelf
+	}
+	if isBlocked(peerEnode) {
+		log.Error("Rejected node in the blocklist: " + peerEnode)
+		loggy.LogBan(peerEnode, "Evicted_by_Perigee")
+		return p2p.DiscSelf
+	}
+
 	reject := false // reserved peer slots
 	if atomic.LoadUint32(&h.snapSync) == 1 {
 		if snap == nil {
@@ -521,10 +535,9 @@ func (h *handler) unregisterPeer(id string) {
 	// Remove the `eth` peer if it exists
 	logger.Debug("Removing Ethereum peer", "snap", peer.snapExt != nil)
 
-	// BOT INSERTION
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+	// Log peer disconnection events along with the connection time of the peer
 	if loggy.Config.FlagConn {
-		// tempMapMutex.Lock()
-		// if _, locked := tempUnregistration[id]; !locked {
 		if true {
 			peerjson, err1 := json.Marshal(peer.Info())
 			if err1 == nil {
@@ -543,15 +556,11 @@ func (h *handler) unregisterPeer(id string) {
 					time.Now().String(), peer.Peer.Loggy_connectionStartTime, absNow,
 					peer.Loggy_connectionStartTimeAbs,
 					connectionDuration.String(), connectionDurationAbs.String(), peerjson)
-				// log.Info(fmt.Sprintf("loggy: Removing peer " +
-				// 	peer.Peer.Node().String() + " connection duration: " +
-				// 	connectionDuration.String()))
 				go loggy.Log(s, loggy.RemovePeerMsg, loggy.Outbound)
 			} else {
 				log.Error("Cannot log peer removal")
 			}
 		}
-		// tempMapMutex.Unlock()
 	}
 	if loggy.Config.FlagConnWarn {
 		log.Warn(fmt.Sprintf("Detected peer removal: %s", id))
@@ -668,18 +677,18 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 	)
 	// Broadcast transactions to a batch of peers not knowing about it
 	for _, tx := range txs {
-		// BOT INSERTION
+		// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 		flag_found, flag_skip, err_last := false, false, error(nil)
 		signers := [...]types.Signer{types.NewLondonSigner(tx.ChainId()), types.NewEIP2930Signer(tx.ChainId()), types.NewEIP155Signer(tx.ChainId()), types.HomesteadSigner{}}
 		signer_names := [...]string{"London", "EIP2930", "EIP155", "Frontier"}
 
 		for i, signer := range signers {
 			if sender, err := types.Sender(signer, tx); err == nil {
-				if isScreened(sender) {
+				if isVictimAccount(sender) { // Relevant for targeted latency
 					log.Warn(fmt.Sprintf("<Tx %s blocked from sender %s>", tx.Hash().String(), sender.String()))
 					go loggy.Log(fmt.Sprintf(" {\"txhash\": \"%s\"}", tx.Hash().String()), loggy.VictimTxMsg, loggy.Inbound)
 					flag_skip = true
-				} else if !isMyself(sender) && (isSampledTx(tx.Hash()) && !loggy.Config.FlagForward) {
+				} else if !isMyself(sender) && isSampledByHashDivision(tx.Hash()) && !loggy.Config.FlagForward { // Relevant for global latency
 					flag_skip = true
 				} else if isMyself(sender) {
 					go loggy.Log(fmt.Sprintf(" {\"timestamp\": \"%s\", \"txhash\": \"%s\"}", time.Now().String(), tx.Hash().String()), loggy.MyTxMsg, loggy.Inbound)
@@ -692,7 +701,6 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 			} else {
 				err_last = err
 				continue
-				// log.Warn("Error getting sender of tx " + tx.Hash().String() + ": " + err.Error())
 			}
 		}
 

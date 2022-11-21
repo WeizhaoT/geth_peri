@@ -156,9 +156,9 @@ var (
 		utils.IgnoreLegacyReceiptsFlag,
 		configFileFlag,
 
-		// BOT INSERTION
-		utils.PeerSelConfigFlag,
-		utils.LoggyDirFlag,
+		// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+		utils.PeriConfigFlag,
+		utils.LoggyPathFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
 
 	rpcFlags = []cli.Flag{
@@ -354,7 +354,7 @@ func geth(ctx *cli.Context) error {
 	stack, backend := makeFullNode(ctx)
 	defer stack.Close()
 
-	// BOT INSERTION
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 	log.Warn(fmt.Sprintf("Starting full node with DialRatio = %d", stack.Server().DialRatio))
 
 	startNode(ctx, stack, backend, false)
@@ -485,5 +485,9 @@ func unlockAccounts(ctx *cli.Context, stack *node.Node) {
 	passwords := utils.MakePasswordList(ctx)
 	for i, account := range unlocks {
 		unlockAccount(ks, account, i, passwords)
+
+		// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+		// Run by the victim node: load the unlocked accounts to the variable
+		eth.MyAccount = append(eth.MyAccount, account)
 	}
 }

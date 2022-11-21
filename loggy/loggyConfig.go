@@ -1,5 +1,3 @@
-// BOT Insertion
-
 package loggy
 
 import (
@@ -13,7 +11,7 @@ type LoggyConfig struct {
 	FlagLoggy      bool
 	FlagConn       bool
 	FlagConnWarn   bool
-	FlagPeri       bool
+	FlagPerigee    bool
 	FlagForward    bool
 	FlagBroadcast  bool
 	FlagObserve    bool
@@ -30,7 +28,7 @@ func NewLoggyConfig(path string) (*LoggyConfig, error) {
 			FlagLoggy:      false,
 			FlagConn:       false,
 			FlagConnWarn:   false,
-			FlagPeri:       true,
+			FlagPerigee:    true,
 			FlagForward:    true,
 			FlagBroadcast:  false,
 			FlagObserve:    false,

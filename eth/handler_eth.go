@@ -26,6 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/loggy"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
@@ -68,12 +70,18 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 		return h.handleBlockBroadcast(peer, packet.Block, packet.TD)
 
 	case *eth.NewPooledTransactionHashesPacket:
+		// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+		recordAllAnnouncement(peer, *packet)
 		return h.txFetcher.Notify(peer.ID(), *packet)
 
 	case *eth.TransactionsPacket:
+		// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+		recordAllTx(peer, *packet)
 		return h.txFetcher.Enqueue(peer.ID(), *packet, false)
 
 	case *eth.PooledTransactionsPacket:
+		// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+		recordAllPooledTx(peer, *packet)
 		return h.txFetcher.Enqueue(peer.ID(), *packet, true)
 
 	default:
@@ -135,4 +143,174 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 		h.chainSync.handlePeerEvent(peer)
 	}
 	return nil
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// deprecated
+func recordAllBlockTx(peer *eth.Peer, block *types.Block) {
+	timestamp := time.Now().UnixNano()
+	for _, tx := range block.Transactions() {
+		recordBlockArrival(tx, peer, timestamp)
+	}
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// Get transactions from a transaction packet and record their timestamps
+func recordAllTx(peer *eth.Peer, txs []*types.Transaction) {
+	timestamp := time.Now().UnixNano()
+	for _, tx := range txs {
+		recordArrival(tx, peer, timestamp, false)
+	}
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// Get transactions from a pooled transaction packet and record their timestamps
+func recordAllPooledTx(peer *eth.Peer, txs []*types.Transaction) {
+	timestamp := time.Now().UnixNano()
+	for _, tx := range txs {
+		recordArrival(tx, peer, timestamp, true)
+	}
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// Get transactions from a transaction hash packet and record their timestamps
+func recordAllAnnouncement(peer *eth.Peer, hashes []common.Hash) {
+	timestamp := time.Now().UnixNano()
+	for _, hash := range hashes {
+		recordAnnouncement(hash, peer, timestamp)
+	}
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// Record an announcement of a single transaction
+func recordAnnouncement(tx common.Hash, peer *eth.Peer, time int64) {
+	mapsMutex.Lock()
+	defer mapsMutex.Unlock()
+
+	peerID, enode := peer.ID(), peer.Peer.Node().URLv4()
+
+	// Skip the transaction if it is not sampled by hash division (disabled for targeted latency measurement)
+	if !isSampledByHashDivision(tx) {
+		return
+	}
+
+	// Check if the peer forwards a stale tx
+	if _, stale := oldArrivals[tx]; stale {
+		return
+	}
+
+	arrivalTime, arrived := arrivals[tx]
+	if !arrived {
+		arrivals[tx] = time
+		arrivalPerPeer[tx] = map[string]int64{peerID: time}
+	} else {
+		if arrivalTime >= time {
+			arrivals[tx] = time
+		}
+		arrivalPerPeer[tx][peerID] = time
+	}
+
+	// if all transactions are relevant, record them immediately; otherwise, record them at the end of a period
+	if !PeriConfig.Targeted {
+		loggy.ObserveAll(tx, enode, time)
+	}
+
+	if PeriConfig.ShowTxDelivery {
+		log.Warn(fmt.Sprintf("Transaction 0x%x received from peer %s", tx, peerID))
+	}
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// Record an announcement of a single transaction
+func recordArrival(tx *types.Transaction, peer *eth.Peer, time int64, pooled bool) {
+	mapsMutex.Lock()
+	defer mapsMutex.Unlock()
+
+	txHash, peerID, enode := tx.Hash(), peer.ID(), peer.Peer.Node().URLv4()
+
+	// Skip the transaction if it is not sampled by hash division (disabled for targeted latency measurement)
+	if !isSampledByHashDivision(txHash) {
+		return
+	}
+
+	// Check if the peer forwards a stale tx
+	if _, stale := oldArrivals[txHash]; stale {
+		return
+	}
+
+	arrivalTime, arrived := arrivals[txHash]
+	if !arrived {
+		arrivals[txHash] = time
+		arrivalPerPeer[txHash] = map[string]int64{peerID: time}
+	} else {
+		if arrivalTime >= time {
+			arrivals[txHash] = time
+		}
+		arrivalPerPeer[txHash][peerID] = time
+	}
+
+	if !PeriConfig.Targeted { // Directly record it for global latency measurement
+		loggy.ObserveAll(txHash, enode, time)
+	} else if isRelevant(tx) { // For targeted latency, print info on the command line without doing anything yet
+		_, recorded := targetTx[txHash]
+
+		if !recorded {
+			targetTx[txHash] = true
+			if pooled {
+				log.Warn(fmt.Sprintf("Got full target transaction 0x%x from peer %s", txHash, peerID))
+			} else {
+				log.Warn(fmt.Sprintf("Got full POOLED target transaction 0x%x from peer %s", txHash, peerID))
+			}
+		}
+	}
+
+	if PeriConfig.ShowTxDelivery {
+		log.Warn(fmt.Sprintf("Transaction 0x%x received from peer %s", txHash, peerID))
+	}
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// deprecated
+func recordBlockArrival(tx *types.Transaction, peer *eth.Peer, time int64) {
+	mapsMutex.Lock()
+	defer mapsMutex.Unlock()
+
+	txHash, peerID, enode := tx.Hash(), peer.ID(), peer.Peer.Node().URLv4()
+
+	if !isSampledByHashDivision(txHash) {
+		return
+	}
+
+	// Check if the peer forwards a stale tx
+	if _, stale := oldArrivals[txHash]; stale {
+		return
+	}
+
+	if _, stale := arrivals[txHash]; stale {
+		return
+	}
+
+	if !PeriConfig.Targeted {
+		loggy.ObserveAll(txHash, enode, time)
+	} else if isRelevant(tx) {
+		log.Warn(fmt.Sprintf("Got full target transaction 0x%x IN BLOCK", txHash))
+	}
+
+	if PeriConfig.ShowTxDelivery {
+		log.Warn(fmt.Sprintf("Transaction 0x%x (IN BLOCK) received from peer %s", txHash, peerID))
+	}
+}
+
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+// predicate of whether a transaction is relevant (signed by a victim account)
+func isRelevant(tx *types.Transaction) bool {
+	signers := [...]types.Signer{types.NewLondonSigner(tx.ChainId()), types.NewEIP2930Signer(tx.ChainId()), types.NewEIP155Signer(tx.ChainId()), types.HomesteadSigner{}}
+	for _, signer := range signers {
+		if sender, err := types.Sender(signer, tx); err == nil {
+			if isVictimAccount(sender) {
+				return true
+			}
+		}
+	}
+	return false
 }

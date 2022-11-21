@@ -19,6 +19,7 @@ package node
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -391,6 +392,15 @@ func (c *Config) NodeKey() *ecdsa.PrivateKey {
 	if err := crypto.SaveECDSA(keyfile, key); err != nil {
 		log.Error(fmt.Sprintf("Failed to persist node key: %v", err))
 	}
+
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+	// Write pubkey of self to a local file, which will be later read by a shell script, and fed to bloXroute gateway
+	pubkeyfile := filepath.Join(instanceDir, "pubkey")
+	pubkey := fmt.Sprintf("%x", crypto.FromECDSAPub(&key.PublicKey)[1:])
+	if err := ioutil.WriteFile(pubkeyfile, []byte(pubkey), 0600); err != nil {
+		log.Error(fmt.Sprintf("Failed to persist node key: %v", err))
+	}
+
 	return key
 }
 

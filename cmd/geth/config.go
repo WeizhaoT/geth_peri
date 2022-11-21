@@ -146,16 +146,18 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 
 	utils.SetEthConfig(ctx, stack, &cfg.Eth)
 
-	// BOT INSERTION
-	cfg.Node.P2P.DialRatio = cfg.Eth.PeriConfig.DialRatio
-	log.Warn(fmt.Sprintf("reading config with DialRatio = %d", cfg.Node.P2P.DialRatio))
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
+	// Apply the DialRatio and MinInbound settings to the Server instance
+	stack.Server().DialRatio = cfg.Eth.PeriConfig.DialRatio
+	stack.Server().MinInbound = cfg.Eth.PeriConfig.MinInbound
+	log.Warn(fmt.Sprintf("Applying config with DialRatio = %d, MinInbound = %d", stack.Server().DialRatio, stack.Server().MinInbound))
 
 	if ctx.IsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.String(utils.EthStatsURLFlag.Name)
 	}
 	applyMetricConfig(ctx, &cfg)
 
-	// BOT INSERTION
+	// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 	stack.Config().P2P.DialRatio = cfg.Eth.PeriConfig.DialRatio
 	stack.Server().DialRatio = cfg.Eth.PeriConfig.DialRatio
 	log.Warn(fmt.Sprintf("applying config with DialRatio = %d", stack.Server().DialRatio))

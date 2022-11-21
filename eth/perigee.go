@@ -1,5 +1,4 @@
-// BOT Insertion
-
+// PERI_AND_LATENCY_RECORDER_CODE_PIECE
 package eth
 
 import (
@@ -37,8 +36,12 @@ var (
 
 	tempUnregistration = make(map[string]bool)
 
+	blocklist = make(map[string]bool)
+
 	mapsMutex    = sync.Mutex{}
 	tempMapMutex = sync.Mutex{}
+
+	snapshot = make(map[string]string)
 
 	MyAccount = make([]string, 0)
 )
@@ -57,37 +60,43 @@ func init() {
 
 }
 
+// Start Peri (at the initialization of geth)
 func StartPeri(pcfg *ethconfig.PeriConfig, hp *handler) {
 	h = hp
 	PeriConfig = pcfg
 	ticker := time.NewTicker(time.Second * time.Duration(pcfg.Period))
 
 	for {
-		log.Warn("New Peri period")
+		log.Warn("New Perigee period")
 		<-ticker.C
 		disconnectByScore()
 	}
 }
 
+// Disconnect peers with highest latency score
 func disconnectByScore() {
 	mapsMutex.Lock()
-	// h.peers.lock.Lock()
 	defer mapsMutex.Unlock()
-	// defer h.peers.lock.Unlock()
 
-	scores := getScores()
+	scores, excused := getScores()
 	numScores := len(scores)
 
-	numReplace := int(math.Round(float64(h.maxPeers)*PeriConfig.ReplaceRatio)) + numScores - h.maxPeers
-	if numReplace < 0 {
-		numReplace = 0
+	// number of peers to drop
+	numDrop := int(math.Round(float64(h.maxPeers)*PeriConfig.ReplaceRatio)) + numScores - h.maxPeers
+	if numDrop < 0 {
+		numDrop = 0
 	}
 
-	showStats(scores)
+	// Check if there is no tx recorded. If so, everyone is excused and skip dropping peers
+	flagReplace := showStats(scores, excused, numDrop)
+	if !flagReplace {
+		log.Warn(fmt.Sprintf("No tx recorded. Perigee skipped. Current peerCount = %d", h.peers.len()))
+		return
+	}
 
 	log.Warn(fmt.Sprintf("peerCount before dropping = %d", h.peers.len()))
 
-	if !PeriConfig.Active {
+	if !PeriConfig.Active { // Peri is inactive, drop randomly instead; Set ReplaceRatio=0 to disable dropping
 		indices := make([]int, len(scores))
 		for i := 0; i < len(indices); i++ {
 			indices[i] = i
@@ -95,7 +104,7 @@ func disconnectByScore() {
 		rand.Shuffle(len(indices), func(i, j int) {
 			indices[i], indices[j] = indices[j], indices[i]
 		})
-		for i := 0; i < numReplace; i++ {
+		for i := 0; i < numDrop; i++ {
 			id := scores[indices[i]].id
 			h.removePeer(id)
 			h.unregisterPeer(id)
@@ -103,9 +112,13 @@ func disconnectByScore() {
 			tempUnregistration[id] = true
 			tempMapMutex.Unlock()
 		}
-	} else {
-		for i := 0; i < numReplace; i++ {
+	} else { // Drop nodes, and add them to the blocklist
+		for i := 0; i < numDrop; i++ {
 			id := scores[i].id
+			if _, isExcused := excused[id]; isExcused {
+				continue
+			}
+			blocklist[extractIPFromEnode(snapshot[id])] = true
 			h.removePeer(id)
 			h.unregisterPeer(id)
 			tempMapMutex.Lock()
@@ -117,7 +130,7 @@ func disconnectByScore() {
 	resetMaps()
 }
 
-// Lock is assumed to be held
+// Lock is assumed to be held;
 func resetMaps() {
 	for tx, arrival := range arrivals {
 		oldArrivals[tx] = arrival
@@ -147,6 +160,7 @@ func resetMaps() {
 	arrivals = make(map[common.Hash]int64)
 	arrivalPerPeer = make(map[common.Hash]map[string]int64)
 	targetTx = make(map[common.Hash]bool)
+	snapshot = make(map[string]string)
 
 	timer := time.NewTimer(time.Millisecond * 500)
 	go func() {
@@ -158,19 +172,35 @@ func resetMaps() {
 	}()
 }
 
-func showStats(scores []idScore) {
+// Generate a score report at the end of Peri period; Write them to log files
+func showStats(scores []idScore, excused map[string]bool, numReplace int) bool {
 	now := time.Now().String()
 	absNow := mclock.Now()
 
-	log.Warn(fmt.Sprintf("Peri triggered at %s", now))
+	log.Warn(fmt.Sprintf("Perigee triggered at %s", now))
 
 	numTx, numPeer := len(arrivals), len(scores)
-	if PeriConfig.ScreenOnly {
+	if PeriConfig.Targeted {
 		numTx = len(targetTx)
 	}
 
+	// No tx recorded in current period
+	if numTx == 0 {
+		log.Warn(fmt.Sprintf("Perigee Summary:\n  # tx: \t%d\n"+
+			"  # peers: \t%d\n",
+			numTx, numPeer))
+
+		if loggy.Config.FlagPerigee {
+			s := fmt.Sprintf("\"time\": \"%s\", \"abstime\": %d, ", now, absNow)
+			s += fmt.Sprintf("\"num_tx\": %d, \"num_peers\": %d, ", numTx, numPeer)
+			go loggy.Log(" {"+s+"}", loggy.PerigeeMsg, loggy.Inbound)
+			log.Warn("Loggy recorded perigee status")
+		}
+		return false
+	}
+
 	totalDeliveries := 0
-	if PeriConfig.ScreenOnly {
+	if PeriConfig.Targeted {
 		for tx := range targetTx {
 			totalDeliveries += len(arrivalPerPeer[tx])
 		}
@@ -198,14 +228,14 @@ func showStats(scores []idScore) {
 	// Display all quantiles
 	quantStr := alignQuantiles(quantiles, false)
 
-	log.Warn(fmt.Sprintf("Peri Summary:\n  # tx: \t%d\n"+
+	log.Warn(fmt.Sprintf("Perigee Summary:\n  # tx: \t%d\n"+
 		"  # peers: \t%d\n  avg. tx delivered by: %.2f peers\n"+
 		"  avg. delay: %.6f sec\n"+
 		"  1/%d ~ %d/%d quantiles (sec):\n    %s\n"+
 		"  all delays (sec):\n%s",
 		numTx, numPeer, avgDeliveries, avgDelayInSec, QuantNum, QuantNum-1, QuantNum, quantStr, delayStr))
 
-	if loggy.Config.FlagPeri {
+	if loggy.Config.FlagPerigee {
 		s := fmt.Sprintf("\"time\": \"%s\", \"abstime\": %d, ", now, absNow)
 		s += fmt.Sprintf("\"num_tx\": %d, \"num_peers\": %d, ", numTx, numPeer)
 		s += fmt.Sprintf("\"avg_deliveries\": %.2f, ", avgDeliveries)
@@ -213,33 +243,62 @@ func showStats(scores []idScore) {
 		s += fmt.Sprintf("\"quantiles\": %s, ", alignQuantiles(quantiles, true))
 		s += fmt.Sprintf("\"all_delays\": %s", alignScores(scores, true))
 
-		// s += ", \"peers\": ["
+		list_evict := make([]string, 0)
+		list_excused := make([]string, 0)
+		for _, idScore := range scores[:numReplace] {
+			if _, isExcused := excused[idScore.id]; isExcused {
+				list_excused = append(list_excused, fmt.Sprintf("\"%s\": %.6f", snapshot[idScore.id], idScore.score/NanoTranslator))
+			} else {
+				list_evict = append(list_evict, fmt.Sprintf("\"%s\": %.6f", snapshot[idScore.id], idScore.score/NanoTranslator))
+			}
+		}
 
-		// list_enode := make([]string, 0)
-		// for _, peer := range h.peers.peers {
-		// 	list_enode = append(list_enode, "\""+peer.Peer.Node().URLv4()+"\"")
-		// }
+		s += ", \"peers_evicted\": {"
+		s += strings.Join(list_evict, ", ")
+		s += "}, \"peers_excused\": {"
+		s += strings.Join(list_excused, ", ")
+		s += "}, \"peers_kept\": {"
 
-		// s += strings.Join(list_enode, ", ")
-		// s += "]"
+		list_kept := make([]string, 0)
+		for _, idScore := range scores[numReplace:] {
+			list_kept = append(list_kept, fmt.Sprintf("\"%s\": %.6f", snapshot[idScore.id], idScore.score/NanoTranslator))
+		}
 
-		go loggy.Log(" {"+s+"}", loggy.PeriMsg, loggy.Inbound)
-		log.Warn("Loggy recorded Peri status")
+		s += strings.Join(list_kept, ", ")
+		s += "}"
+
+		go loggy.Log(" {"+s+"}", loggy.PerigeeMsg, loggy.Inbound)
+		log.Warn("Loggy recorded perigee status")
 	}
+	return true
 }
 
 // Unit: ns
-func getScores() []idScore {
+func getScores() ([]idScore, map[string]bool) {
 	// scores := make(map[string]float64)
 	scores := []idScore{}
+	excused := make(map[string]bool)
+
+	latestArrival := int64(0)
+	for tx, firstArrival := range arrivals {
+		if PeriConfig.Targeted {
+			if _, isTarget := targetTx[tx]; !isTarget {
+				continue
+			}
+		}
+		if firstArrival > latestArrival {
+			latestArrival = firstArrival
+		}
+	}
 
 	// loop through the **currect** peers instead of recorded ones
 	for id, peer := range h.peers.peers {
+		snapshot[id] = h.peers.peers[id].Node().URLv4()
 		birth := peer.Peer.Loggy_connectionStartTime.UnixNano()
 
 		ntx, totalDelay, avgDelay := 0, int64(0), 0.0
 		for tx, firstArrival := range arrivals {
-			if PeriConfig.ScreenOnly {
+			if PeriConfig.Targeted {
 				if _, isTarget := targetTx[tx]; !isTarget {
 					continue
 				}
@@ -252,7 +311,7 @@ func getScores() []idScore {
 			delay := arrival - firstArrival
 			if !forwarded || delay > int64(PeriConfig.MaxDelayPenalty*Milli2Nano) {
 				delay = int64(PeriConfig.MaxDelayPenalty * Milli2Nano)
-			} else if PeriConfig.ScreenOnly {
+			} else if PeriConfig.Targeted {
 				if !loggy.Config.FlagAllTx {
 					if delay == 0 {
 						loggy.ObserveAll(tx, peer.Node().URLv4(), firstArrival)
@@ -266,8 +325,11 @@ func getScores() []idScore {
 			totalDelay += delay
 		}
 
-		if ntx == 0 {
+		if ntx == 0 { // Check if the peer is connected too late (if so, excuse it temporarily)
 			avgDelay = float64(int64(PeriConfig.MaxDelayPenalty * Milli2Nano))
+			if birth > latestArrival-PeriConfig.MaxDeliveryTolerance*Milli2Nano {
+				excused[id] = true
+			}
 		} else {
 			avgDelay = float64(totalDelay) / float64(ntx)
 		}
@@ -277,10 +339,17 @@ func getScores() []idScore {
 
 	// Scores are sorted by descending order
 	sort.Slice(scores, func(i, j int) bool {
-		return scores[i].score > scores[j].score
+		ndi, ndj := isNoDrop(scores[i].id), isNoDrop(scores[j].id)
+		if ndi && !ndj {
+			return false // give i lower priority when i cannot be dropped
+		} else if ndj && !ndi {
+			return true
+		} else {
+			return scores[i].score > scores[j].score
+		}
 	})
 
-	return scores
+	return scores, excused
 }
 
 // Unit: ns
@@ -341,19 +410,21 @@ func alignScores(scores []idScore, flagJson bool) string {
 	}
 }
 
-func isScreened(addr common.Address) bool {
+// Check the given signer address in the list provided by Peri config
+func isVictimAccount(addr common.Address) bool {
 	if isMyself(addr) {
 		return false
 	}
 
-	for i := 0; i < len(PeriConfig.ScreenList); i++ {
-		if strings.EqualFold(addr.Hex(), PeriConfig.ScreenList[i]) {
+	for i := 0; i < len(PeriConfig.TargetAccountList); i++ {
+		if strings.EqualFold(addr.Hex(), PeriConfig.TargetAccountList[i]) {
 			return true
 		}
 	}
 	return false
 }
 
+// Check if the given signer address is unlocked by self
 func isMyself(addr common.Address) bool {
 	for _, account := range MyAccount {
 		if strings.EqualFold(addr.Hex(), account) {
@@ -363,7 +434,7 @@ func isMyself(addr common.Address) bool {
 	return false
 }
 
-func isSampledTx(txHash common.Hash) bool {
+func isSampledByHashDivision(txHash common.Hash) bool {
 	if PeriConfig.ObservedTxRatio <= 0 {
 		return false
 	}
@@ -373,4 +444,29 @@ func isSampledTx(txHash common.Hash) bool {
 
 	z := big.NewInt(0)
 	return z.Mod(txHash.Big(), big.NewInt(int64(PeriConfig.ObservedTxRatio))).Cmp(big.NewInt(0)) == 0
+}
+
+// Check if a node is always undroppable (for instance, a bloXroute gateway)
+func isNoDrop(id string) bool {
+	enode := snapshot[id] // h.peers.peers[id].Node().URLv4()
+	if strings.Contains(enode, ethconfig.SelfIP) {
+		return true
+	}
+	for _, ip := range PeriConfig.NoDropList {
+		if strings.Contains(enode, ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractIPFromEnode(enode string) string {
+	parts := strings.Split(enode, "@")
+	parts = strings.Split(parts[len(parts)-1], ":")
+	return parts[0]
+}
+
+func isBlocked(enode string) bool {
+	_, blocked := blocklist[extractIPFromEnode(enode)]
+	return blocked
 }
